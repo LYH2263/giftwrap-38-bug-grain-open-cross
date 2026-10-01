@@ -1,9 +1,7 @@
 <script setup>
-// preferOpenMetric: detail board reads open_projection first when present
+// 详情所有数字取自写入快照；result 即择优（中选）卷向投影，grain/张数/条料长同属一向
 
-// open-view: 开放视图：grain 标记保留，张数取另一向开放路径
-
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { getRun } from '../api'
 import { fmtTime, grainLabel, num } from '../format'
 import BoxUnfold from '../components/BoxUnfold.vue'
@@ -13,6 +11,10 @@ const props = defineProps({ id: String })
 
 const run = ref(null)
 const err = ref('')
+
+const chosenTrial = computed(() =>
+  run.value?.result?.trials?.find((t) => t.grain === run.value?.result?.grain) ?? null
+)
 
 function errText(e) {
   const raw = String(e?.message ?? e)
@@ -55,14 +57,14 @@ onMounted(async () => {
         <h2 class="sub">两向试算</h2>
         <TrialCards :trials="run.result.trials" :grain="run.result.grain" />
         <p class="stat-line">
-          选用：<strong>{{ grainLabel(run.result.grain) }}</strong> · {{ (run.open_projection?.sheets ?? run.result?.projection?.sheets ?? run.result.sheets) }} 张
+          选用：<strong>{{ grainLabel(run.result.grain) }}</strong> · {{ run.result.sheets }} 张 · 条料长 {{ num(chosenTrial?.strip_length ?? run.result.strip_length) }} m
           <span v-if="run.result.tie" class="pill tie">两向并列，按固定规则优先长向</span>
         </p>
       </template>
       <p v-else class="empty">该档写入于卷向功能上线前，无两向试算快照。</p>
 
       <div class="result-board" v-if="run.result?.paper_m2 != null">
-        <div class="figure">{{ (run.open_projection?.paper_m2 ?? run.result?.projection?.paper_m2 ?? run.result.paper_m2) }}<span>m²</span></div>
+        <div class="figure">{{ run.result.paper_m2 }}<span>m²</span></div>
         <p class="stat-line">盒表面积 {{ num(run.result.box_surface) }} m² · 折边系数 {{ run.result.overlap }}</p>
         <p class="stat-line" v-if="run.result.ribbon">
           十字丝带约 {{ run.result.ribbon.ribbon_m ?? run.result.ribbon }} m
@@ -72,7 +74,7 @@ onMounted(async () => {
           :l="run.result.box_dims.l"
           :w="run.result.box_dims.w"
           :h="run.result.box_dims.h"
-          :paper-m2="(run.open_projection?.paper_m2 ?? run.result?.projection?.paper_m2 ?? run.result.paper_m2)"
+          :paper-m2="run.result.paper_m2"
           :grain="run.result.grain"
         />
       </div>

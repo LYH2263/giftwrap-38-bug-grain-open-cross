@@ -84,9 +84,29 @@ def test_save_persists_self_contained_snapshot(temp_db):
     assert [t["grain"] for t in snap["trials"]] == ["length", "width"]
     assert [t["sheets"] for t in snap["trials"]] == [2, 1]
     assert snap["overlap"] == 1.15
+    # 中选卷向（width）派生尺投影到顶层
+    assert snap["strip_length"] == 0.6
+    assert snap["aligned_ruler"] == 0.7
+    assert snap["cross_ruler"] == 0.6
+    assert snap["roll_length_used"] == 0.6
     # 响应与落库快照一致
     for k in ("grain", "sheets", "tie", "paper_m2", "box_surface", "trials", "rulers"):
         assert resp[k] == snap[k]
+
+
+def test_stored_blob_has_no_read_time_projection_keys(temp_db):
+    """projection/派生尺/open_* 只在读取期生成，绝不写回 result_json。"""
+    rid = estimate_service.run_estimate(1, 2, None, "cross", True, "")["run_id"]
+    c = connect()
+    try:
+        raw = c.execute("SELECT result_json FROM calc_runs WHERE id=?", (rid,)).fetchone()[0]
+    finally:
+        c.close()
+    stored = json.loads(raw)
+    for key in ("projection", "strip_length", "aligned_ruler", "cross_ruler",
+                "roll_length_used", "open_view", "list_sheets", "list_grain",
+                "open_grain_crossed"):
+        assert key not in stored
 
 
 def test_snapshot_pinned_after_paper_width_change(temp_db):
@@ -114,6 +134,15 @@ def test_list_and_detail_share_same_snapshot(temp_db):
     detail = history.get_run(rid)
     assert listed["result"] == detail["result"]
     assert listed["box_name"] == detail["box_name"] == "书型盒"
+    # 两路同样投影中选（width）卷向：grain 与张数/条料长同属一向
+    for res in (listed["result"], detail["result"]):
+        assert res["grain"] == "width"
+        assert res["sheets"] == 1
+        assert res["strip_length"] == 0.6
+        assert res["aligned_ruler"] == 0.7
+        assert res["cross_ruler"] == 0.6
+        assert res["roll_length_used"] == 0.6
+    assert listed["result"]["projection"] == detail["result"]["projection"]
 
 
 def test_get_run_missing(temp_db):

@@ -26,6 +26,10 @@ const verifyErr = ref('')
 
 const validPapers = computed(() => papers.value.filter((p) => Number(p.roll_width) > 0))
 const readonlyParams = computed(() => replay.value !== null)
+// 回放快照的中选试算：grain/张数/条料长同属择优卷向
+const replayChosenTrial = computed(() =>
+  replay.value?.trials?.find((t) => t.grain === replay.value?.grain) ?? null
+)
 
 // 复算模式下下拉展示写入时名字/卷宽（控件只读），避免活表改名/改宽造成口径错位
 const paperOptions = computed(() => {
@@ -50,7 +54,9 @@ function closeEq(a, b, tol = 1e-6) {
   return Math.abs(Number(a) - Number(b)) <= tol
 }
 
-// 复算干算 vs 落库快照：逐项互证
+// 复算干算 vs 落库快照：逐项互证。
+// replay 取自详情接口的 result——中选卷向投影快照（grain/张数/条料长同属一向）；
+// 不比顶层 strip_length（干算响应无此顶层键，条料长在各 trial 内），不比 .paper（干算响应为活纸行）。
 function compare(fresh, snap) {
   const diffs = []
   for (const k of ['box_id', 'grain', 'sheets', 'tie', 'tiebreak', 'paper_m2']) {
@@ -171,7 +177,7 @@ onMounted(async () => {
     <div v-if="replay" class="snap-banner">
       复算档 #{{ replayId }} ·
       写入用纸「{{ replay.paper?.name }}」卷宽 {{ num(replay.paper?.roll_width) }} m ·
-      当时选用 <strong>{{ grainLabel(replay.grain) }}</strong> {{ replay.sheets }} 张 ·
+      当时选用 <strong>{{ grainLabel(replay.grain) }}</strong> {{ replay.sheets }} 张 · 条料长 {{ num(replayChosenTrial?.strip_length ?? replay.strip_length) }} m ·
       参数只读，干算与落库快照互证。
       <router-link class="btn btn-sm ghost" to="/bench">退出复算</router-link>
     </div>
