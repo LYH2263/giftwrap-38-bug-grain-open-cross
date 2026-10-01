@@ -155,3 +155,44 @@ def test_snapshot_json_roundtrip_serializable(temp_db):
     finally:
         c.close()
     assert json.loads(raw)["schema_version"] == 1
+
+
+def test_dry_estimate_dims_cross_validates_saved_run(temp_db):
+    """算纸台复算：用写入同参干算，须与旧编号钉住的 sheets 互证。
+
+    改现行卷宽后：旧档张数不被回刷；同参干算仍复现旧档；新单按新宽重择。
+    """
+    run_id = estimate_service.run_estimate(1, 2, None, "cross", True, "")["run_id"]
+    papers.update_paper_width(2, 0.8)  # 现行卷宽变了
+
+    snap = history.get_run(run_id)["result"]
+    assert snap["sheets"] == 1 and snap["grain"] == "width"  # 旧档钉住值原样
+
+    fresh = estimate_service.dry_estimate_dims(
+        snap["box_dims"]["l"], snap["box_dims"]["w"], snap["box_dims"]["h"],
+        snap["paper"]["roll_width"], snap["overlap"], snap["wrap_style"],
+    )
+    for k in ("grain", "sheets", "tie", "tiebreak", "paper_m2"):
+        assert fresh[k] == snap[k]
+    assert fresh["trials"] == snap["trials"]
+
+    # 新单按现行卷宽重择，不受旧档影响
+    new_est = estimate_service.run_estimate(1, 2, None, "cross", False, "")
+    assert new_est["paper"]["roll_width"] == 0.8
+    assert [t["sheets"] for t in new_est["trials"]] == [2, 1]
+
+
+def test_dry_estimate_dims_rejects_non_positive_roll_width(temp_db):
+    with pytest.raises(HTTPException) as ei:
+        estimate_service.dry_estimate_dims(0.3, 0.2, 0.15, 0, None, "cross")
+    assert ei.value.status_code == 422
+    with pytest.raises(HTTPException) as ei:
+        estimate_service.dry_estimate_dims(0.3, 0.2, 0.15, -0.5, None, "cross")
+    assert ei.value.status_code == 422
+    assert _run_count() == 0  # 干算永不落库
+
+
+def test_dry_estimate_dims_rejects_bad_dims(temp_db):
+    with pytest.raises(HTTPException) as ei:
+        estimate_service.dry_estimate_dims(0.3, -0.2, 0.15, 0.7, None, "cross")
+    assert ei.value.status_code == 422

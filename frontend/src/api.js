@@ -25,4 +25,6 @@ export function dryEstimate({ box_id, paper_id, overlap, wrap_style = 'cross' })
   if (overlap !== '' && overlap != null) q.set('overlap', overlap)
   return getJSON(`/api/estimate?${q}`)
 }
+// 复算互证：按写入同参（快照盒三边/卷宽/折边）干算，不读活表、不落库
+export const dryEstimateParams = (payload) => postJSON('/api/estimate/dry', payload)
 export const saveEstimate = (payload) => postJSON('/api/estimate', { ...payload, save: true })

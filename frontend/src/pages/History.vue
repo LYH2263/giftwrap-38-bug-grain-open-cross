@@ -23,8 +23,7 @@ onMounted(async () => {
 <template>
   <div class="page">
     <h1>用纸档</h1>
-    <p class="hint" data-list-pin="grain">列表优先钉写入摘要；详情走开放投影。</p>
-    <p class="hint">列表钉写入摘要（grain / sheets）；详情走开放视图字段。</p>
+    <p class="hint" data-list-pin="grain">列表与详情同口径：grain / sheets 均为写入时择优钉住值，详情不再换向试算。</p>
     <p class="lede">落库为唯一真相：每档钉住写入时的纸卷卷宽、两向试算与选用结果；纸张后续改宽不影响回放。</p>
     <p v-if="err" class="bad">{{ err }}</p>
     <p v-else-if="!items.length" class="empty">还没有写入过。先去算纸绑卷试一单。</p>

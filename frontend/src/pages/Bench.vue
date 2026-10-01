@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getJSON, listBoxes, listPapers, getRun, dryEstimate, saveEstimate } from '../api'
+import { getJSON, listBoxes, listPapers, getRun, dryEstimate, dryEstimateParams, saveEstimate } from '../api'
 import { grainLabel, num } from '../format'
 import BoxUnfold from '../components/BoxUnfold.vue'
 import TrialCards from '../components/TrialCards.vue'
@@ -50,10 +50,10 @@ function closeEq(a, b, tol = 1e-6) {
   return Math.abs(Number(a) - Number(b)) <= tol
 }
 
-// 复算干算 vs 落库快照：逐项互证
+// 复算干算 vs 落库快照：逐项互证（同参已由复算入参保证，无需再对 box_id）
 function compare(fresh, snap) {
   const diffs = []
-  for (const k of ['box_id', 'grain', 'sheets', 'tie', 'tiebreak', 'paper_m2']) {
+  for (const k of ['grain', 'sheets', 'tie', 'tiebreak', 'paper_m2']) {
     if (JSON.stringify(fresh[k]) !== JSON.stringify(snap[k])) diffs.push(k)
   }
   for (let i = 0; i < Math.max(fresh.trials?.length ?? 0, snap.trials?.length ?? 0); i++) {
@@ -80,19 +80,30 @@ async function go() {
   }
   busy.value = true
   try {
-    const params = readonlyParams.value
-      ? { box_id: replay.value.box_id, paper_id: replay.value.paper.id,
-          overlap: replay.value.overlap, wrap_style: replay.value.wrap_style ?? 'cross' }
-      : { box_id: bid.value, paper_id: pid.value, overlap: overlapInput.value }
-    out.value = await dryEstimate(params)
     if (readonlyParams.value) {
+      // 复算：用写入时同参（快照盒三边/卷宽/折边）干算，与旧编号钉住的 sheets 互证；
+      // 不读活表——现行卷宽或另一向都不得回刷旧档张数
+      const d = replay.value.box_dims
+      const rw = replay.value.paper?.roll_width
+      if (!d || !(Number(rw) > 0)) {
+        verifyErr.value = '复算失败：快照缺少盒三边或写入时卷宽，无法按同参干算'
+        return
+      }
+      out.value = await dryEstimateParams({
+        length: d.l, width: d.w, height: d.h,
+        roll_width: rw,
+        overlap: replay.value.overlap,
+        wrap_style: replay.value.wrap_style ?? 'cross',
+      })
       const diffs = compare(out.value, replay.value)
       verify.value = { ok: diffs.length === 0, diffs }
+    } else {
+      out.value = await dryEstimate({ box_id: bid.value, paper_id: pid.value, overlap: overlapInput.value })
     }
   } catch (e) {
     const msg = errText(e)
     if (readonlyParams.value) {
-      // 纸/盒可能已被删除或置脏：快照照常展示，错误只落在复算区
+      // 快照参数异常（如写入时卷宽非正）：快照照常展示，错误只落在复算区
       verifyErr.value = `复算失败：${msg}`
     } else {
       err.value = msg
